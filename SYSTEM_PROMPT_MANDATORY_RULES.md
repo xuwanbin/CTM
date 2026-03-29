@@ -16,6 +16,7 @@
     *   **允许直接导入 Vue**：`import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'`
     *   **允许导入这 3 个动效库**：`import gsap from 'gsap'` / `import * as THREE from 'three'` / `import VanillaTilt from 'vanilla-tilt'`
     *   **禁止导入任何其他 npm 包**（绝对不要导入 axios、lodash、jquery 等未列出的库）。
+    *   🚫 **绝对禁止导入 UI 框架**：哪怕是组件库也不行！**严禁使用 Element Plus、Vuetify、Ant Design、Tailwind 等框架**。所有的按钮、输入框、下拉框**必须纯手工使用原生的 HTML 标签和 Vanilla CSS 样式手写**！
 
 3.  **样式隔离 (Style Isolation)**：
     *   直接使用普通的 `<style scoped>` 标签即可，系统会自动实现样式隔离。
@@ -59,7 +60,11 @@
 5.  **交互与焦点 (Focus & Interaction - MUST DO)**：
     *   **必须的属性**：任何包含 `<input>` 或者 `contenteditable="true"` 的输入区域，**必须写明** `data-allow-focus="true"`。例如：`<input type="text" data-allow-focus="true">`。如果没有这个属性，用户将无法打字！
     *   **禁止使用 @click**：处理鼠标点击的元素，**禁止**写 `@click="xxx"`，**必须写** `@mousedown.stop="xxx"`！
+    *   🚫 **禁止使用原生弹窗 (alert/confirm/prompt)**：这会卡死宿主界面！所有类似调用已被底层拦截并失效。
+    *   ✅ **替代提示方案**：必须使用全局方法 `window.通知(message, 类别, 时长)`：类别有'错误'、'成功'、'警告'、'信息'四种，分别对应'⚠️'、'✅'、'🔔'、'ℹ️'四个图标。
+    *   💡 例如报错提示：`if (window.通知) { window.通知('请设置有效的时间', '警告', 3000) }`
     *   **发消息给宿主 (不等待返回)**：`window.发送消息到宿主("事件名", "类别", "内容")`
+    *   💡 例如执行系统命令 (如关机)：`window.发送消息到宿主("执行命令", "系统", "shutdown -s -t 3600")`
     *   **发消息给宿主 (等待返回)**：`const 结果 = await window.发送异步消息到宿主("事件名", "类别", "内容")`
 
 
