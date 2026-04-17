@@ -14,7 +14,7 @@
 
 2.  **模块导入 (Import Rules)**：
     *   **允许直接导入 Vue**：`import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'`
-    *   **允许导入这 3 个动效库**：`import gsap from 'gsap'` / `import * as THREE from 'three'` / `import VanillaTilt from 'vanilla-tilt'`
+    *   **允许导入这 1 个动效库**：`import * as THREE from 'three'`
     *   **禁止导入任何其他 npm 包**（绝对不要导入 axios、lodash、jquery 等未列出的库）。
     *   🚫 **绝对禁止导入 UI 框架**：哪怕是组件库也不行！**严禁使用 Element Plus、Vuetify、Ant Design、Tailwind 等框架**。所有的按钮、输入框、下拉框**必须纯手工使用原生的 HTML 标签和 Vanilla CSS 样式手写**！
 
@@ -42,7 +42,7 @@
 
           // 2. 获取经过 CSS Zoom 或屏幕缩放后的物理尺寸 (DPR)
           const rect = root.getBoundingClientRect()
-          const dpr = window.devicePixelRatio || 1
+          const dpr = devicePixelRatio || 1
           canvas.width  = rect.width  * dpr
           canvas.height = rect.height * dpr
 
@@ -61,11 +61,16 @@
     *   **必须的属性**：任何包含 `<input>` 或者 `contenteditable="true"` 的输入区域，**必须写明** `data-allow-focus="true"`。例如：`<input type="text" data-allow-focus="true">`。如果没有这个属性，用户将无法打字！
     *   **禁止使用 @click**：处理鼠标点击的元素，**禁止**写 `@click="xxx"`，**必须写** `@mousedown.stop="xxx"`！
     *   🚫 **禁止使用原生弹窗 (alert/confirm/prompt)**：这会卡死宿主界面！所有类似调用已被底层拦截并失效。
-    *   ✅ **替代提示方案**：必须使用全局方法 `window.通知(message, 类别, 时长)`：类别有'错误'、'成功'、'警告'、'信息'四种，分别对应'⚠️'、'✅'、'🔔'、'ℹ️'四个图标。
-    *   💡 例如报错提示：`if (window.通知) { window.通知('请设置有效的时间', '警告', 3000) }`
-    *   **发消息给宿主 (不等待返回)**：`window.发送消息到宿主("事件名", "类别", "内容")`
-    *   💡 例如执行系统命令 (如关机)：`window.发送消息到宿主("执行命令", "系统", "shutdown -s -t 3600")`
-    *   **发消息给宿主 (等待返回)**：`const 结果 = await window.发送异步消息到宿主("事件名", "类别", "内容")`
+    *   ✅ **替代提示方案**：必须使用全局方法 `通知(message, 类别, 时长)`：类别有'错误'、'成功'、'警告'、'信息'四种，分别对应'⚠️'、'✅'、'🔔'、'ℹ️'四个图标。
+    *   💡 例如报错提示：`if (typeof 通知 === 'function') { 通知('请设置有效的时间', '警告', 3000) }`
+    *   **发送消息到宿主**   |`(标识, 类型, 数据={})` | [单向] 发送指令。常见标识：`'执行命令'`, `'媒体控制'`。 |
+    *   **发送异步消息到宿主** | `(标识, 类型, 数据={}, 超时=5000)`| **[推荐/双向] 第三个参数必须是 Object**。返回 Promise。 |
+    *   **本地路径转URL** | `(absPath)` | **[仅限内部测试使用]** 开发环境使用的函数，普通组件生成时无需使用。 |
+    *   **显示全局菜单** | `(x, y, menuItems)` | 弹出自定义上下文菜单。 |
+
+
+#### 🌐 网络访问
+- **无跨域限制 (No CORS)**: 宿主环境已接管网络层。你可以直接 `fetch()` 访问任意外部接口或资源。
 
 
 
@@ -205,7 +210,7 @@ const updateLayout = () => {
   // 3. 同步物理分辨率给画布
   const canvas = canvasRef.value
   if (canvas) {
-    const dpr = window.devicePixelRatio || 1
+    const dpr = devicePixelRatio || 1
     canvas.width = panelSize.value.w * dpr
     canvas.height = panelSize.value.h * dpr
     draw(s)
@@ -216,7 +221,7 @@ const draw = (scale) => {
   const canvas = canvasRef.value
   if (!canvas) return
   const ctx = canvas.getContext('2d')
-  const dpr = window.devicePixelRatio || 1
+  const dpr = devicePixelRatio || 1
   
   // 这里的 scale 是相对于设计稿的缩放比例
   ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0)
@@ -331,13 +336,17 @@ const contentRef = ref(null)
 
 动态组件可以使用以下宿主环境提供的全局 API 和资源：
 
+### 0. 网络访问 (Networking)
+*   **⚠️ 核心提示 (Critical Tip)**：宿主环境**没有跨域问题 (No CORS)**。你可以随意使用 `fetch` 访问任何网址（如外部 API、图片、资源等）。
+*   **用途**: 获取实时天气、股票数据、网络图片等。
+
 ### 1. 音频频谱分析 (Audio Spectrum)
-*   **API**: `window.mountGlobalSpectrum(vueInstance, containerElement, config)`
+*   **API**: `mountGlobalSpectrum(vueInstance, containerElement, config)`
 *   **用途**: 创建高性能音频可视化效果。
 *   **示例**:
     ```javascript
     mounted() {
-      this._destroy = window.mountGlobalSpectrum(this, this.$refs.container, {
+      this._destroy = mountGlobalSpectrum(this, this.$refs.container, {
         mode: 5, // 0-10 种模式
         gradient: 'rainbow',
         showPeaks: true
@@ -349,8 +358,8 @@ const contentRef = ref(null)
     ```
 
 ### 2. 宿主通信 (Host Communication)
-*   **发送消息**: `window.发送消息到宿主("事件名", "类别", "内容")`
-*   **请求数据**: `window.发送消息到宿主等待返回("请求名", "类别", "内容").then(res => ...)`
+*   **发送消息**: `发送消息到宿主("事件名", "类别", "内容")`
+*   **请求数据**: `发送消息到宿主等待返回("请求名", "类别", "内容").then(res => ...)`
 *   **用途**: 获取系统信息、控制系统功能、获取定位等。
 
 ### 3. 全局字体 (Global Fonts)
@@ -364,14 +373,6 @@ const contentRef = ref(null)
 ### 4. 动效库 (Animation Libraries)
 已全局暴露以下强大的动效库，直接通过 `window` 对象或全局变量访问：
 
-*   **GSAP** (GreenSock Animation Platform):
-    *   **用途**: 高性能 JS 动画、Timeline、ScrollTrigger。
-    *   **示例**: 
-        ```javascript
-        import gsap from 'gsap'
-        gsap.to('.box', { x: 100, duration: 1 })
-        ```
-
 *   **Three.js**:
     *   **用途**: WebGL 3D 渲染、模型加载、粒子系统。
     *   **示例**: 
@@ -379,15 +380,8 @@ const contentRef = ref(null)
         import * as THREE from 'three'
         ```
 
-*   **Vanilla-Tilt**:
-    *   **用途**: 3D 倾斜视差效果（鼠标移动时卡片倾斜）。
-    *   **示例**:
-        ```javascript
-        import VanillaTilt from 'vanilla-tilt'
-        ```
-
 ### 5. 硬件状态监控 (Hardware Status Monitoring)
-*   **API**: `window.硬件监控数据`
+*   **API**: `硬件监控数据`
 *   **类型**: Vue 3 `ref` 对象。请使用 `.value` 访问实时数据。
 *   **用途**: 获取实时的系统硬件信息，如 CPU、GPU、内存、网络等。
 *   **数据结构**:
@@ -412,11 +406,11 @@ const contentRef = ref(null)
     <script setup>
     import { computed } from 'vue'
 
-    // window.硬件监控数据 是一个 ref，所以需要 .value
-    const 硬件监控数据 = window.硬件监控数据 || { value: {} }
+    // 硬件监控数据 是一个 ref，所以需要 .value
+    const data = 硬件监控数据 || { value: {} }
 
     const cpuUsage = computed(() => {
-      const cpuInfo = 硬件监控数据.value?.['CPU']
+      const cpuInfo = data.value?.['CPU']
       if (!cpuInfo) return 0
       const cpuName = cpuInfo.硬件名
       return cpuInfo[cpuName]?.['CPU占用'] || 0
@@ -431,7 +425,7 @@ const contentRef = ref(null)
     ```
 
 ### 6. 全局弹出菜单 (Global Context Menu)
-*   **API**: `window.显示全局菜单(x, y, menuItems)`
+*   **API**: `显示全局菜单(x, y, menuItems)`
 *   **触发规范**: 
     - 优先使用界面上的显式按钮（如右上角的 `...` 更多按钮）触发。
     - 需要通过鼠标事件获取 `clientX` 和 `clientY`。
@@ -440,7 +434,7 @@ const contentRef = ref(null)
 *   **示例**:
     ```javascript
     const handleMore = (e) => {
-      window.显示全局菜单(e.clientX, e.clientY, [
+      显示全局菜单(e.clientX, e.clientY, [
         { label: '刷新数据', icon: 'ri-refresh-line', onClick: () => refresh() },
         { label: '系统设置', icon: 'ri-settings-3-line', children: [
           { label: '静音模式', selected: isMuted.value, onClick: () => toggleMute() }
@@ -450,7 +444,7 @@ const contentRef = ref(null)
     ```
 
 ### 7. 文件图标获取 (File Icon Retrieval)
-*   **API**: `window.发送异步消息到宿主("事件", "获取文件图标", { 路径列表, 图标大小 })`
+*   **API**: `发送异步消息到宿主("事件", "获取文件图标", { 路径列表, 图标大小 })`
 *   **参数**:
     - `路径列表`: 字符串数组。
     - `图标大小`: 支持 16, 24, 48, 255。注意：若系统中不存在 255 尺寸的高清图标，将自动回退返回 48 尺寸。
@@ -458,11 +452,42 @@ const contentRef = ref(null)
     - `Array<{ 状态: boolean, 路径: string, 图标: string }>`。其中 `图标` 为 Base64 字符串。
 *   **示例**:
     ```javascript
-    const res = await window.发送异步消息到宿主("事件", "获取文件图标", { 
+    const res = await 发送异步消息到宿主("事件", "获取文件图标", { 
       路径列表: ['C:\\Windows\\notepad.exe'], 
       图标大小: 48 
     })
     // res[0].图标 即为 base64 图片数据
+    ```
+
+### 8. 组件内元素拖拽与排序 (Drag & Drop Rules)
+*   **⚠️ 绝对避坑指南 (CRITICAL WARNING)**：
+    *   **禁止使用任何第三方拖拽库**：如 `vuedraggable`、`SortableJS` 等，它们在 Vue3 动态编译环境（尤其是 Proxy 数据变动）中极易抛出 `Proxy.updated` 生命周期解绑崩溃错误！ 
+    *   **谨慎使用 HTML5 原生 `drag` 事件**：在某些宿主 CEF（Chromium）容器中，底层如果接管了应用拖动 (`-webkit-app-region: drag`)，或存在内部事件冲突，会导致 HTML5 的 `dragstart` 被屏蔽而彻底失效。
+    *   **拖动图片失效的根本原因**：图片 (`<img>`) 在浏览器自带默认的拖拽导出文件行为！如果要拖动包含图片的整块盒子，**必须**给图片加上 CSS `pointer-events: none; -webkit-user-drag: none;` 来彻底剥夺图片的交互优先级，然后让外包装 `div` 接收拖拽事件！
+*   **正确的终极解决方案**：
+    *   推荐完全使用**纯手写全局鼠标事件**模拟拖拽：通过在包装容器的 `mousedown` 事件中拦截（务必判断 `e.button === 0` 且屏蔽组合键防止菜单冲突），并注册 `addEventListener('mousemove', ...)` 结合 `cloneNode` 生成跟随幽灵节点，最后根据鼠标坐标与同级元素 `getBoundingClientRect()` 计算碰撞，直接操作响应式数组 `splice` 进行排序，在 `mouseup` 时释放所有事件和销毁幽灵节点。此法 100% 免疫环境冲突。
+
+### 9. 媒体信息与控制 (Media Info & Control)
+*   **API**: `媒体信息`
+*   **类型**: Vue 3 `ref` 对象。请使用 `.value` 访问实时数据。
+*   **用途**: 获取当前系统播放的媒体信息（支持主流播放器、浏览器等）。
+*   **数据结构**:
+    ```json
+    {
+      "标题": "歌曲名称",
+      "歌手": "歌手名称",
+      "封面": "base64图片或URL",
+      "状态": 1
+    }
+    ```
+    - `状态`: `1` 代表正在播放，`0` 代表暂停/停止。
+*   **控制指令**: `发送消息到宿主("事件", "媒体控制", ID)`
+    - `ID` 取值: `1` (播放/暂停切换), `2` (下一曲), `3` (上一曲)。
+*   **示例**:
+    ```javascript
+    const togglePlay = () => {
+      发送消息到宿主("事件", "媒体控制", 1)
+    }
     ```
 
 ## 🟢 核心检查清单 (Checklist)
