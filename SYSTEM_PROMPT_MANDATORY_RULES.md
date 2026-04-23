@@ -340,21 +340,38 @@ const contentRef = ref(null)
 *   **⚠️ 核心提示 (Critical Tip)**：宿主环境**没有跨域问题 (No CORS)**。你可以随意使用 `fetch` 访问任何网址（如外部 API、图片、资源等）。
 *   **用途**: 获取实时天气、股票数据、网络图片等。
 
-### 1. 音频频谱分析 (Audio Spectrum)
-*   **API**: `mountGlobalSpectrum(vueInstance, containerElement, config)`
-*   **用途**: 创建高性能音频可视化效果。
+### 1. 高性能音频频谱 (Audio Spectrum)
+*   **API**: `mountAudioVisualizer(vueInstance, containerElement, config)`
+*   **用途**: 创建 60FPS 丝滑、极低 CPU 占用的音频可视化效果。
+*   **核心配置 (config)**:
+    *   `useCustom: true` (必须开启以使用高性能分析器)
+    *   `canvas`: 传入你的 `<canvas>` 元素
+    *   `bands`: 频段数量 (推荐 32-128)
+    *   `fftSize`: FFT 精度 (推荐 2048, 4096, 8192)
+    *   `onCanvasDraw`: **[推荐方式]** 每一帧的绘图回调。
+*   **数据读取**:
+    *   在回调中使用 `instance.getBars()` 获取频段数组。
+    *   每个频段包含 `displayValue` (平滑后的 0-1 值)。
+*   **性能金律 (Performance Best Practices)**:
+    *   **不要在循环里直接 `fillRect` 或 `stroke`**：这会导致大量 GPU 指令切换。
+    *   **路径合并 (Path Batching)**：在循环中只使用 `ctx.rect()` 或 `ctx.lineTo()`，循环结束后统一执行一次 `ctx.fill()` 或 `ctx.stroke()`。
 *   **示例**:
     ```javascript
-    mounted() {
-      this._destroy = mountGlobalSpectrum(this, this.$refs.container, {
-        mode: 5, // 0-10 种模式
-        gradient: 'rainbow',
-        showPeaks: true
-      })
-    },
-    beforeUnmount() {
-      if (this._destroy) this._destroy()
-    }
+    this._destroy = mountAudioVisualizer(this, containerRef, {
+      useCustom: true,
+      canvas: canvasRef,
+      bands: 64,
+      onCanvasDraw: (instance) => {
+        const ctx = instance.canvasCtx; const bars = instance.getBars()
+        ctx.clearRect(0, 0, width, height)
+        ctx.beginPath() // 开始批量路径
+        bars.forEach((bar, i) => {
+          const h = bar.displayValue * height
+          ctx.rect(i * w, height - h, w, h)
+        })
+        ctx.fillStyle = '#00f2ff'; ctx.fill() // 一次性绘制
+      }
+    })
     ```
 
 ### 2. 宿主通信 (Host Communication)
