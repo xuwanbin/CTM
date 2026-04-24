@@ -30,13 +30,22 @@
 
 6.  **布局稳定性与响应式 (Fluid Layout - CRITICAL)**：
     *   **根容器要求**：最外层 `div` 必须设置 `width: 100%; height: 100%; overflow: hidden;`。
-    *   **流动布局**：必须使用 **Flexbox** 或 **Grid**。**禁止**使用固定像素的 `margin-left: 200px` 或 `absolute` 定位的固定坐标来排列核心内容。
-    *   **容器适配**：当用户拖动改变容器大小时，组件内容必须能平滑自适应，严禁出现内容重叠或超出容器边界（除非使用了 `zoom` 适配逻辑）。
+    *   **流动布局**：必须使用 **Flexbox** 或 **Grid**。**禁止**使用固定像素的 `margin-left: 200px` 或 `absolute` 定位的固定坐标来排列内容。
+    *   **分流逻辑**：
+        - **流式填充 (推荐)**：让内容随容器拉伸自动排列（如任务栏、信息条）。
+        - **等比缩放 (卡片/仪表盘)**：仅当必须保持宽高比时，使用 `Math.min(width/BASE_W, height/BASE_H)` 进行整体缩放。
+    *   **容器适配**：当用户拖动改变容器大小时，内容严禁重叠或超出边界。
 
 7.  **视觉风格规范 (Visual Aesthetics)**：
-    *   **透明透视感**：除非用户明确要求加“阴影”或“背景”，否则**一律禁止**添加实体背景色 (`background-color`) 和重影阴影 (`box-shadow`)。
-    *   **融合标准**：默认使用透明或极低透明度的磨砂质感（`backdrop-filter: blur(3px)`），使组件看起来像“透视”在壁纸之上，而不是一个死板的方块。
-    *   **边框处理**：推荐使用极细的半透明边框 (`1px solid rgba(0,0,0,0.1)`) 来增强透视深度感。
+    *   **透明透视感**：除非用户明确要求加“阴影”或“背景”，否则**硬性禁止**添加实体背景色 (`background-color`) 和重影阴影 (`box-shadow`)。背景透明度严禁超过 `0.1`。
+    *   **融合标准**：默认使用透明或极低透明度的暗色磨砂质感（`backdrop-filter: blur(3px)`），使组件看起来像“透视”在壁纸之上。
+    *   **边框处理**：推荐使用极细的黑色半透明边框 (`1px solid rgba(0,0,0,0.1)`) 来增强透视边界感。
+
+8.  **错误处理与状态反馈 (Error Handling - MUST DO)**：
+    *   **变量定义**：必须定义 `const error = ref('')` 用来接收系统状态。
+    *   **API 绑定**：调用 `mountAudioVisualizer` 等 API 时，第一个参数必须传入 `{ error }`。
+    *   **UI 反馈**：`<template>` 中必须包含 `v-if="error"` 的显示逻辑，用于告知用户“音频系统未就绪”、“权限被拒绝”等信息，否则用户会认为组件失效。
+    *   **显示规范**：错误层应绝对定位居中，颜色显眼（如 `red`），并设置 `pointer-events: none` 避免干扰交互。
 
     *   💎 **Canvas 高清渲染标准模板**：
         ```javascript
@@ -69,12 +78,11 @@
 
 5.  **交互 (Interaction)**：
     *   **禁止使用 @click**：处理鼠标点击的元素，**禁止**写 `@click="xxx"`，**必须写** `@mousedown.stop="xxx"`！
-    *   🚫 **禁止使用原生弹窗 (alert/confirm/prompt)**：这会卡死宿主界面！所有类似调用已被底层拦截并失效。
-    *   ✅ **替代提示方案**：必须使用全局方法 `通知(message, 类别, 时长)`：类别有'错误'、'成功'、'警告'、'信息'四种，分别对应'⚠️'、'✅'、'🔔'、'ℹ️'四个图标。
-    *   💡 例如报错提示：`if (typeof 通知 === 'function') { 通知('请设置有效的时间', '警告', 3000) }`
+    *   🚫 **禁止使用原生弹窗 (alert/confirm/prompt)**：这会卡死宿主界面！
+    *   ✅ **替代提示方案**：必须使用全局方法 `通知(message, 类别, 时长)`：类别有'错误'、'成功'、'警告'、'信息'四种。
+    *   **⚠️ 严禁使用 `this` (CRITICAL)**：由于强制使用 `<script setup>`，**代码中绝对禁止出现 `this` 关键字**！所有 API 调用（如 `mountAudioVisualizer`）的第一个参数原本需传实例的地方，请直接传 `null`。
     *   **发送消息到宿主**   |`(标识, 类型, 数据={})` | [单向] 发送指令。常见标识：`'执行命令'`, `'媒体控制'`。 |
     *   **发送异步消息到宿主** | `(标识, 类型, 数据={}, 超时=5000)`| **[推荐/双向] 第三个参数必须是 Object**。返回 Promise。 |
-    *   **本地路径转URL** | `(absPath)` | **[仅限内部测试使用]** 开发环境使用的函数，普通组件生成时无需使用。 |
     *   **显示全局菜单** | `(x, y, menuItems)` | 弹出自定义上下文菜单。 |
 
 
@@ -93,6 +101,7 @@
 <script setup>
 import { ref } from 'vue'
 
+const error = ref('')
 const count = ref(0)
 const increment = () => {
   count.value++
@@ -101,28 +110,28 @@ const increment = () => {
 
 <template>
   <div class="counter-widget">
+    <div v-if="error" class="status-msg">{{ error }}</div>
     <h3 class="title">动态计数器</h3>
     <div class="content">
       <span>当前数值: {{ count }}</span>
-      <button @click="increment" class="btn">点击 +1</button>
+      <button @mousedown.stop="increment" class="btn">点击 +1</button>
     </div>
   </div>
 </template>
 
 <style>
 .counter-widget {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 15px;
-  box-sizing: border-box;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  position: relative;
   color: white;
-  /* 默认保持透视/透明，不加沉重背景 */
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
+}
+
+.status-msg {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(0,0,0,0.4); color: #ff4444; font-size: 14px; z-index: 10;
 }
 
 .title {
@@ -370,21 +379,17 @@ const contentRef = ref(null)
 *   **性能金律 (Performance Best Practices)**:
     *   **不要在循环里直接 `fillRect` 或 `stroke`**：这会导致大量 GPU 指令切换。
     *   **路径合并 (Path Batching)**：在循环中只使用 `ctx.rect()` 或 `ctx.lineTo()`，循环结束后统一执行一次 `ctx.fill()` 或 `ctx.stroke()`。
-*   **示例**:
     ```javascript
-    this._destroy = mountAudioVisualizer(this, containerRef, {
+    const error = ref('')
+    // 将 { error } 作为第一个参数传入，系统会自动将状态消息（如“音频开关已关闭”）填充到 error.value 中
+    const _destroy = mountAudioVisualizer({ error }, containerRef, {
       useCustom: true,
       canvas: canvasRef,
       bands: 64,
       onCanvasDraw: (instance) => {
         const ctx = instance.canvasCtx; const bars = instance.getBars()
         ctx.clearRect(0, 0, width, height)
-        ctx.beginPath() // 开始批量路径
-        bars.forEach((bar, i) => {
-          const h = bar.displayValue * height
-          ctx.rect(i * w, height - h, w, h)
-        })
-        ctx.fillStyle = '#00f2ff'; ctx.fill() // 一次性绘制
+        // ...
       }
     })
     ```
