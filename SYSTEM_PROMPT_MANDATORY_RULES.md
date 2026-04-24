@@ -17,8 +17,9 @@
 
 2.  **模块导入 (Import Rules)**：
     *   **允许直接导入 Vue**：`import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'`
-    *   **允许导入这 1 个动效库**：`import * as THREE from 'three'`
-    *   **禁止导入任何其他 npm 包**（绝对不要导入 axios、lodash、jquery 等未列出的库）。
+    *   **允许导入 1 个动效库**：`import * as THREE from 'three'`。
+        - **使用建议**：仅在需要真实的 3D 效果、复杂的纹理映射或超大规模（10万级）粒子群时使用。
+        - **2D 特效**：普通 2D 粒子、发光、线条连接等，必须优先使用纯 Canvas 手写，以获得最佳的加载速度。
     *   🚫 **绝对禁止导入 UI 框架**：哪怕是组件库也不行！**严禁使用 Element Plus、Vuetify、Ant Design、Tailwind 等框架**。所有的按钮、输入框、下拉框**必须纯手工使用原生的 HTML 标签和 Vanilla CSS 样式手写**！
 
 3.  **样式隔离 (Style Isolation)**：
@@ -206,7 +207,48 @@ onUnmounted(() => {
 </style>
 ```
 
-### 模板 D：等比缩放卡片 (仅用于面板/仪表盘)
+### 模板 G：高性能 2D 粒子管理系统
+**适用场景**：频谱烟花、背景流星、交互粒子等。
+
+```javascript
+// 在 onCanvasDraw 外部（或 setup 内）定义粒子池
+const particles = []
+
+const drawParticles = (instance) => {
+  const { canvasCtx: ctx, canvas } = instance
+  const bars = instance.getBars()
+  const dpr = window.devicePixelRatio || 1
+  
+  // 1. 生成粒子（根据频谱能量）
+  bars.forEach((bar, i) => {
+    if (bar.displayValue > 0.6) { // 只有高能量时喷发粒子
+      particles.push({
+        x: i * (canvas.width / dpr / bars.length),
+        y: canvas.height / dpr,
+        vx: (Math.random() - 0.5) * 2,
+        vy: -bar.displayValue * 15,
+        life: 1.0
+      })
+    }
+  })
+
+  // 2. 更新与绘制（批量处理）
+  ctx.beginPath()
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]
+    p.x += p.vx; p.y += p.vy; p.life -= 0.02 // 物理更新
+    
+    if (p.life <= 0) {
+      particles.splice(i, 1); continue
+    }
+    
+    // 批量画圆，不要在循环里 fill
+    ctx.moveTo(p.x, p.y)
+    ctx.arc(p.x, p.y, 2 * p.life, 0, Math.PI * 2)
+  }
+  ctx.fillStyle = '#ffffff'; ctx.fill()
+}
+```
 **适用场景**：必须保持 16:9 或特定比例的精美卡片。带有背景模糊效果。
 
 ### 模板 F：全透明流式频谱 (最推荐用于特效)
