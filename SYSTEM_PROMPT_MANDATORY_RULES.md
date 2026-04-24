@@ -26,6 +26,7 @@
     *   **系统逻辑**：宿主会自动放大组件的外层容器。
     *   **你的任务**：只按 **1:1 的逻辑像素（实际设计尺寸）** 编写 CSS，什么尺寸就是多少 px，不要手动去算放大倍数，系统会用 `zoom` 自动缩放你的组件。
     *   **Canvas 必须使用高清模板**：如果你要写 `<canvas>`，你**必须**复制底部的【模板 D】。绝对不要自己手写 Canvas 宽高计算逻辑，否则必定模糊！
+    *   **⚠️ 响应式禁令 (Reactivity Bottleneck)**：对于频谱数据（`bars`）、实时坐标等 60FPS 变动的数据，**严禁使用 `ref` 或 `reactive` 存储或中转**！应直接在绘图回调内部获取并立即使用。通过 Vue 响应式系统处理高频动画数据会导致严重的 CPU 阻塞、渲染延迟和掉帧。
     *   **时间/文字弹性缩放**：如果做时钟组件，字体大小必须跟随父容器尺寸动态变化：`fontSize = 容器宽度 * 0.12`。绝对不要写死固定的 `font-size: 50px`。千万要使用等宽字体（`monospace` 或内置的 `Audiowide` / `Orbitron`）。
 
 6.  **布局稳定性与响应式 (Fluid Layout - CRITICAL)**：
@@ -36,16 +37,20 @@
         - **等比缩放 (卡片/仪表盘)**：仅当必须保持宽高比时，使用 `Math.min(width/BASE_W, height/BASE_H)` 进行整体缩放。
     *   **容器适配**：当用户拖动改变容器大小时，内容严禁重叠或超出边界。
 
-7.  **视觉风格规范 (Visual Aesthetics)**：
-    *   **透明透视感**：除非用户明确要求加“阴影”或“背景”，否则**硬性禁止**添加实体背景色 (`background-color`) 和重影阴影 (`box-shadow`)。背景透明度严禁超过 `0.1`。
-    *   **融合标准**：默认使用透明或极低透明度的暗色磨砂质感（`backdrop-filter: blur(3px)`），使组件看起来像“透视”在壁纸之上。
-    *   **边框处理**：推荐使用极细的黑色半透明边框 (`1px solid rgba(0,0,0,0.1)`) 来增强透视边界感。
+7.  **视觉风格规范 (Visual Aesthetics - CRITICAL)**：
+    *   **绝对禁令 (Absolute Prohibitions)**：
+        - **禁止背景颜色**：背景透明度严禁超过 `0.1`。
+        - **禁止一切阴影**：既禁止 CSS `box-shadow`，也**硬性禁止** Canvas 的 `ctx.shadowBlur`。
+    *   **标准参数表 (Standard Parameters - 请严格遵守数值)**：
+        | 参数项 | 标准值 | 说明 |
+        | :--- | :--- | :--- |
+        | **模糊度 (Blur)** | `blur(3px)` | 严禁使用默认的 10px/20px |
+        | **边框 (Border)** | `1px solid rgba(0, 0, 0, 0.1)` | 必须是**暗色/黑色**微量边框 |
+        | **面板背景** | `rgba(0, 0, 0, 0.05)` | 极致透明，融入背景 |
 
-8.  **错误处理与状态反馈 (Error Handling - MUST DO)**：
-    *   **变量定义**：必须定义 `const error = ref('')` 用来接收系统状态。
-    *   **API 绑定**：调用 `mountAudioVisualizer` 等 API 时，第一个参数必须传入 `{ error }`。
-    *   **UI 反馈**：`<template>` 中必须包含 `v-if="error"` 的显示逻辑，用于告知用户“音频系统未就绪”、“权限被拒绝”等信息，否则用户会认为组件失效。
-    *   **显示规范**：错误层应绝对定位居中，颜色显眼（如 `red`），并设置 `pointer-events: none` 避免干扰交互。
+8.  **错误处理与状态反馈 (Error Handling - 零容忍)**：
+    *   **必须实现**：定义 `const error = ref('')`，调用 API 传 `{ error }`，Template 写 `v-if="error"`。
+    *   **不写即视为违规**：无状态反馈的组件将无法通过宿主环境的兼容性检测。
 
     *   💎 **Canvas 高清渲染标准模板**：
         ```javascript
@@ -265,17 +270,14 @@ const draw = (scale) => {
 onMounted(() => {
   nextTick(() => {
     updateLayout()
-    drawTimer = setInterval(() => {
-      const s = panelSize.value.w / BASE_W
-      draw(s)
-    }, 100)
+    // 移除这里的 setInterval，绘图应由 resizeObserver 触发单次重绘
+    // 或由 mountAudioVisualizer 持续驱动
     resizeObserver = new ResizeObserver(updateLayout)
     resizeObserver.observe(rootRef.value)
   })
 })
 
 onUnmounted(() => {
-  clearInterval(drawTimer)
   if (resizeObserver) resizeObserver.disconnect()
 })
 </script>
@@ -377,19 +379,25 @@ const contentRef = ref(null)
     *   在回调中使用 `instance.getBars()` 获取频段数组。
     *   每个频段包含 `displayValue` (平滑后的 0-1 值)。
 *   **性能金律 (Performance Best Practices)**:
-    *   **不要在循环里直接 `fillRect` 或 `stroke`**：这会导致大量 GPU 指令切换。
-    *   **路径合并 (Path Batching)**：在循环中只使用 `ctx.rect()` 或 `ctx.lineTo()`，循环结束后统一执行一次 `ctx.fill()` 或 `ctx.stroke()`。
+    *   **单一渲染循环 (Single Source of Truth)**：**严禁**在 `onCanvasDraw` 之外启动任何 `setInterval` 或 `requestAnimationFrame` 来刷画布。`onCanvasDraw` 本身就是系统驱动的高性能渲染回调。
+    *   **零响应式干扰**：**禁止**在绘图回调中执行 `barsRef.value = data` 这种同步操作。应直接在回调中定义变量并立即绘制。
+    *   **禁止绘图阴影**：**硬性禁止**使用 `ctx.shadowBlur` 和 `ctx.shadowColor`。这些属性在 Canvas 中极其低效。
+    *   **单一路径绘制**：在循环中只使用 `ctx.rect()`，循环结束后统一执行一次 `ctx.fill()`。
     ```javascript
     const error = ref('')
-    // 将 { error } 作为第一个参数传入，系统会自动将状态消息（如“音频开关已关闭”）填充到 error.value 中
+    // 正确架构：回调内获取数据 -> 回调内直接绘制 -> 不与 Vue ref 同步
     const _destroy = mountAudioVisualizer({ error }, containerRef, {
       useCustom: true,
       canvas: canvasRef,
-      bands: 64,
       onCanvasDraw: (instance) => {
         const ctx = instance.canvasCtx; const bars = instance.getBars()
+        const { width, height } = instance.canvas
         ctx.clearRect(0, 0, width, height)
-        // ...
+        ctx.beginPath()
+        bars.forEach((bar, i) => {
+          ctx.rect(i * 10, height - bar.displayValue * height, 8, bar.displayValue * height)
+        })
+        ctx.fillStyle = '#00f2ff'; ctx.fill()
       }
     })
     ```
