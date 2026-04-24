@@ -28,6 +28,16 @@
     *   **Canvas 必须使用高清模板**：如果你要写 `<canvas>`，你**必须**复制底部的【模板 D】。绝对不要自己手写 Canvas 宽高计算逻辑，否则必定模糊！
     *   **时间/文字弹性缩放**：如果做时钟组件，字体大小必须跟随父容器尺寸动态变化：`fontSize = 容器宽度 * 0.12`。绝对不要写死固定的 `font-size: 50px`。千万要使用等宽字体（`monospace` 或内置的 `Audiowide` / `Orbitron`）。
 
+6.  **布局稳定性与响应式 (Fluid Layout - CRITICAL)**：
+    *   **根容器要求**：最外层 `div` 必须设置 `width: 100%; height: 100%; overflow: hidden;`。
+    *   **流动布局**：必须使用 **Flexbox** 或 **Grid**。**禁止**使用固定像素的 `margin-left: 200px` 或 `absolute` 定位的固定坐标来排列核心内容。
+    *   **容器适配**：当用户拖动改变容器大小时，组件内容必须能平滑自适应，严禁出现内容重叠或超出容器边界（除非使用了 `zoom` 适配逻辑）。
+
+7.  **视觉风格规范 (Visual Aesthetics)**：
+    *   **透明透视感**：除非用户明确要求加“阴影”或“背景”，否则**一律禁止**添加实体背景色 (`background-color`) 和重影阴影 (`box-shadow`)。
+    *   **融合标准**：默认使用透明或极低透明度的磨砂质感（`backdrop-filter: blur(3px)`），使组件看起来像“透视”在壁纸之上，而不是一个死板的方块。
+    *   **边框处理**：推荐使用极细的半透明边框 (`1px solid rgba(0,0,0,0.1)`) 来增强透视深度感。
+
     *   💎 **Canvas 高清渲染标准模板**：
         ```javascript
         _initCanvas() {
@@ -57,8 +67,7 @@
         ```
 
 
-5.  **交互与焦点 (Focus & Interaction - MUST DO)**：
-    *   **必须的属性**：任何包含 `<input>` 或者 `contenteditable="true"` 的输入区域，**必须写明** `data-allow-focus="true"`。例如：`<input type="text" data-allow-focus="true">`。如果没有这个属性，用户将无法打字！
+5.  **交互 (Interaction)**：
     *   **禁止使用 @click**：处理鼠标点击的元素，**禁止**写 `@click="xxx"`，**必须写** `@mousedown.stop="xxx"`！
     *   🚫 **禁止使用原生弹窗 (alert/confirm/prompt)**：这会卡死宿主界面！所有类似调用已被底层拦截并失效。
     *   ✅ **替代提示方案**：必须使用全局方法 `通知(message, 类别, 时长)`：类别有'错误'、'成功'、'警告'、'信息'四种，分别对应'⚠️'、'✅'、'🔔'、'ℹ️'四个图标。
@@ -102,11 +111,18 @@ const increment = () => {
 
 <style>
 .counter-widget {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
   padding: 15px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  /* 默认保持透视/透明，不加沉重背景 */
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
 }
 
 .title {
@@ -163,7 +179,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #2c3e50;
+  /* 除非要求，否则不加背景色，保持透视 */
+  background: transparent;
   border-radius: 12px;
 }
 .clock-face {
@@ -228,7 +245,7 @@ const draw = (scale) => {
   ctx.clearRect(0, 0, BASE_W, BASE_H)
 
   // 绘制内容 (使用基准坐标 400x250 即可)
-  ctx.fillStyle = 'rgba(15, 20, 30, 0.7)'
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'
   ctx.beginPath(); ctx.roundRect(0, 0, BASE_W, BASE_H, 20); ctx.fill()
   
   ctx.fillStyle = '#00f2ff'
@@ -299,8 +316,6 @@ const contentRef = ref(null)
       <div class="fixed-content" ref="contentRef">
         <div class="header">SYSTEM STATUS</div>
         <div class="main-data">98%</div>
-        <!-- 交互按钮必须加上 data-allow-focus -->
-        <button class="action-btn" data-allow-focus="true">REBOOT</button>
       </div>
   </div>
 </template>
@@ -513,6 +528,16 @@ const contentRef = ref(null)
 1.  [ ] **语法精简**：如果是使用 `<script setup>`，是否已经删除了多余的 `export default`？
 2.  [ ] **定时器清理**：是否在 `onUnmounted` 中清理了所有的 `setInterval` 或 `requestAnimationFrame`？
 3.  [ ] **DPI 适配**：如果是 Canvas 组件，是否使用了逻辑/物理映射模板？
+4.  [ ] **响应式验证**：是否使用了 Flexbox/Grid？是否移除了所有硬编码的绝对坐标？
+
+## 🟢 响应式避坑指南 (Anti-Patterns)
+
+**如果你的组件在缩放时布局乱了，通常是因为你犯了以下错误：**
+
+1.  **禁止在内部元素使用死像素宽度**：如 `width: 380px`。应使用 `width: 100%` 或 `max-width`。
+2.  **禁止使用绝对定位的死坐标**：如 `left: 150px; top: 100px;`。这在容器尺寸改变时必乱。请改用 `display: flex` 居中或 `grid` 排版。
+3.  **必须设置盒模型**：在根样式或全局样式中确保 `box-sizing: border-box;`。
+4.  **避免百分比 margin/padding 的坑**：百分比边距是相对于父元素宽度的，有时会导致垂直方向排版意外。推荐使用 `gap` (Flex/Grid) 来控制间距。
 
 ---
 **现在，请根据用户的具体需求生成组件代码：**
