@@ -8,6 +8,7 @@
 8.  **🚫 零容忍违规清单 (Zero Tolerance Checklist - 违规必删)**：
     *   **严禁 UI 控件**：禁止私自添加 **控制面板、按钮、开关、标题文字、状态信息、FPS 计数器**。组件必须是全自动、静默运行的。
     *   **驱动开发思维**：你不是在写展示网页，你是在写**硬件显示驱动**。禁止添加任何“你觉得好用”的功能。
+    *   **严禁重复造轮子**：系统提供的 `mountAudioVisualizer` 等 API 已经内置了高清屏适配、Canvas 缩放、组件销毁清理等逻辑。**严禁**自行编写 `resizeCanvas`、`initCanvas` 或手写复杂的 CSS 缩放逻辑，直接使用系统 API 提供的 `instance.canvas`。
     *   **严禁使用 `this`**：必须使用组合式 API。
     *   **严禁默认背景/边框**：除非明确要求，否则禁止出现 `background`, `border`, `shadow`, `backdrop-filter`。
 
@@ -466,6 +467,8 @@ const rootRef = ref(null)
     *   **原因**：宿主物理引擎已在 AudioWorklet 线程完成了最高效的平滑计算。在 JS 主线程二次平滑会导致严重的画面延迟（拖影）和 CPU 浪费。
 
 *   **性能金律 (Performance Best Practices)**:
+    *   **⚠️ 性能死穴 (Avoid Layout Reflow)**：**绝对禁止**在 `onCanvasDraw` 内部（即每秒 60 次的循环中）调用 `getBoundingClientRect()`、`getComputedStyle()`、`offsetHeight` 或访问任何会触发浏览器重排（Reflow）的属性！这会导致 UI 线程瞬间卡顿。如果需要尺寸，请通过 API 提供的 `instance.canvas` 直接读取宽度。
+    *   **循环合并 (Loop Merging)**：严禁对 `bars` 数组进行多次重复遍历。如果你要同时画柱子、光晕和粒子，请在一个 `forEach` 或 `for` 循环内完成所有逻辑，减少 CPU 迭代开销。
     *   **坐标系对齐 (Coordinate Alignment)**：在 `onCanvasDraw` 的第一行必须使用 `ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0)`。**禁止手动计算物理像素**。
     *   **单一路径绘制 (Batch Drawing)**：严禁在循环内执行 `ctx.fill()` 或更改 `fillStyle`。正确做法：1. `beginPath()` -> 2. 循环内只写 `rect()` -> 3. 循环外统一 `fill()`。
     *   **单一渲染循环**：禁止外接 `setInterval` 刷画布。
