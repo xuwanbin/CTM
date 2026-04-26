@@ -25,29 +25,33 @@ const drawSpectrum = (instance) => {
     const { canvasCtx: ctx, canvas } = instance
     const bars = instance.getBars ? instance.getBars() : []
     const dpr = window.devicePixelRatio || 1
-    const rect = canvas.getBoundingClientRect()
-    const W = rect.width
-    const H = rect.height
-    if (canvas.width !== Math.max(1, W * dpr)) canvas.width = Math.max(1, W * dpr)
-    if (canvas.height !== Math.max(1, H * dpr)) canvas.height = Math.max(1, H * dpr)
+    
+    // 【性能优化】直接从物理像素换算逻辑像素，严禁调用 getBoundingClientRect() 触发 Reflow
+    const W = canvas.width / dpr
+    const H = canvas.height / dpr
+    
+    // 【性能优化】统一设置变换矩阵
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     tick += 0.016
 
     const n = bars.length || 1
+    if (n <= 1) return
+
+    // 1. 合并计算：在一次循环内完成能量提取和数据缓存
     let low = 0, mid = 0, high = 0
+    const barValues = new Float32Array(n)
     for (let i = 0; i < n; i++) {
         const v = Math.min(1, Math.max(0, getValue(bars[i])))
+        barValues[i] = v
         if (i < n * 0.18) low += v
         else if (i < n * 0.62) mid += v
         else high += v
     }
+    
     low /= Math.max(1, Math.floor(n * 0.18))
     mid /= Math.max(1, Math.floor(n * 0.44))
     high /= Math.max(1, Math.floor(n * 0.38))
-    const totalEnergy = low + mid + high
     pulse = Math.max(pulse * 0.88, low)
-
-
 
     ctx.clearRect(0, 0, W, H)
 
@@ -57,10 +61,10 @@ const drawSpectrum = (instance) => {
     const baseY = H * 0.85
     const barW = contentWidth / n
 
-    // ── 频谱柱子（白色）──
+    // 2. 批量构建频谱路径（减少 fill 调用）
     ctx.beginPath()
     for (let i = 0; i < n; i++) {
-        const v = Math.min(1, Math.max(0, getValue(bars[i])))
+        const v = barValues[i]
         const h = 4 + Math.pow(v, 0.72) * (H * 0.6)
         const x = startX + i * barW + barW * 0.15
         const w = Math.max(1, barW * 0.7)
@@ -73,10 +77,10 @@ const drawSpectrum = (instance) => {
     ctx.fillStyle = grad
     ctx.fill()
 
-    // ── 底部粒子（白色）──
+    // 3. 批量构建底部粒子路径
     ctx.beginPath()
     for (let i = 0; i < n; i += 2) {
-        const v = Math.min(1, Math.max(0, getValue(bars[i])))
+        const v = barValues[i]
         const x = startX + i * barW + barW * 0.5
         const y = baseY + 12 + Math.sin(tick * 2 + i * 0.16) * 4
         ctx.moveTo(x + v * 6, y)
